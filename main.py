@@ -1,0 +1,92 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "67bef775-328f-4ae5-8aab-30480d4580b9",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from fastapi import FastAPI\n",
+    "from pydantic import BaseModel\n",
+    "\n",
+    "from intent_detector import detect_intent\n",
+    "from data_sources import EVENTS_DB, FACILITIES_DB, BOOKINGS_DB\n",
+    "from availability_checker import check_availability\n",
+    "from booking_service import create_booking\n",
+    "from confirmation_manager import needs_confirmation\n",
+    "from response_generator import generate_response\n",
+    "\n",
+    "app = FastAPI(title=\"College Campus AI Agent\")\n",
+    "\n",
+    "class UserRequest(BaseModel):\n",
+    "    user: str\n",
+    "    query: str\n",
+    "    resource_id: str | None = None\n",
+    "    date: str | None = None\n",
+    "    time: str | None = None\n",
+    "    confirm: bool | None = False\n",
+    "\n",
+    "@app.post(\"/agent\")\n",
+    "def campus_agent(request: UserRequest):\n",
+    "    intent = detect_intent(request.query)\n",
+    "\n",
+    "    # EVENT FLOW\n",
+    "    if intent == \"events\":\n",
+    "        return generate_response(intent, EVENTS_DB)\n",
+    "\n",
+    "    # FACILITY FLOW\n",
+    "    if intent == \"facilities\":\n",
+    "        return generate_response(intent, FACILITIES_DB)\n",
+    "\n",
+    "    # BOOKING FLOW\n",
+    "    if intent == \"booking\":\n",
+    "        if needs_confirmation(intent) and not request.confirm:\n",
+    "            return {\n",
+    "                \"message\": \"Please confirm booking by setting confirm=true\"\n",
+    "            }\n",
+    "\n",
+    "        available = check_availability(\n",
+    "            request.resource_id,\n",
+    "            request.date,\n",
+    "            request.time,\n",
+    "            BOOKINGS_DB\n",
+    "        )\n",
+    "\n",
+    "        if not available:\n",
+    "            return {\"message\": \"Resource not available at given time\"}\n",
+    "\n",
+    "        booking = create_booking(\n",
+    "            request.user,\n",
+    "            request.resource_id,\n",
+    "            request.date,\n",
+    "            request.time\n",
+    "        )\n",
+    "        return generate_response(intent, booking)\n",
+    "\n",
+    "    return {\"message\": \"Intent not recognized\"}\n"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.13.9"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
